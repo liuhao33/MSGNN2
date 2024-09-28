@@ -44,10 +44,11 @@ conda activate MSGNN
 ```
 or
 ```shell
-conda env create -n MSGNN python=3.7
+conda create -n MSGNN python=3.7
 conda activate MSGNN
 conda install pytorch==1.12.1 torchvision==0.13.1 torchaudio==0.12.1 cudatoolkit=11.6 -c pytorch -c conda-forge
 conda install scipy=1.7.3 networkx=2.6.3 scikit-learn=1.0.2 dask=2021.10.0
+conda install ipykernel matplotlib
 
 ```
 
