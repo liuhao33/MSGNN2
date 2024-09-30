@@ -114,10 +114,10 @@ def load_DBLP_data2(prefix='data/DBLP_processed'):
 def load_glove_vectors(dim=50):
     print('Loading GloVe pretrained word vectors')
     file_paths = {
-        50: 'glove.6B.50d.txt',
-        100: 'data/wordvec/GloVe/glove.6B.100d.txt',
-        200: 'data/wordvec/GloVe/glove.6B.200d.txt',
-        300: 'data/wordvec/GloVe/glove.6B.300d.txt'
+        50: 'data/glove.6B.50d.txt',
+        100: 'data/glove.6B.100d.txt',
+        200: 'data/glove.6B.200d.txt',
+        300: 'data/glove.6B.300d.txt'
     }
     f = open(file_paths[dim], 'r', encoding='utf-8')
     wordvecs = {}
