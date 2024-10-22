@@ -41,7 +41,7 @@ This code has been tested on the following systems:
 
 + matplotlib
 
-+ nltk (not required, see [below](##Train-and-test-model-on-DBLP))
++ nltk (not required, see [below](#train-and-test-model-on-dblp))
 
 # How to use
 
