@@ -4,14 +4,21 @@
 This is the official implementation of MSGNN for Availability Check.
 
 # System Requirements
+
 ## Hardware Platform
+
 This code has been tested on the following platform:
-+ CPU: I9-14900K 
-+ GPU: RTX 4090 
-+ Memory: 64GB 
+
++ CPU: I9-14900K
+
++ GPU: RTX 4090
+
++ Memory: 64GB
 
 ## Software requirements
+
 ### OS requirements
+
 This code has been tested on the following systems:
 
 + Windows 10 (with CUDA 11.6)
@@ -29,20 +36,24 @@ This code has been tested on the following systems:
 + scikit-learn 1.0.2
 
 + dask 2021.10.0
+  
++ ipykernel
 
++ matplotlib
 
-Data preprocessing is partially adopted from [MAGNN](https://github.com/cynricfu/MAGNN).
-And dependencies for the preprocessing are not listed here.
++ nltk (not required, see [below](##Train-and-test-model-on-DBLP))
 
-# How to use:
+# How to use
 
-### Install dependencies
+## Install dependencies
 
 ```shell
 conda env create -f env.yaml
 conda activate MSGNN
 ```
+
 or
+
 ```shell
 conda create -n MSGNN python=3.7
 conda activate MSGNN
@@ -52,29 +63,100 @@ conda install ipykernel matplotlib
 
 ```
 
+## Train and test model on DBLP
 
-### Train and test model on DBLP
-The DBLP dataset is adopted from [MAGNN](https://github.com/cynricfu/MAGNN). Based on it, we search schema instances and feed them to our model.
-To train the model and test it on link prediction task, run
+The DBLP dataset is cleaned by [MAGNN](https://github.com/cynricfu/MAGNN), see `preprocess_v2_DBLP.ipynb` section 1. for details (an extra `nltk` package is used in this section only).
+
+Based on the cleaned dataset, we search schema instances (see `preprocess_v2_DBLP.ipynb` section 2) and feed them to our model.
+
+We have uploaded all preperocessed data in `/data/<dataset_name>_preprocessed`. All raw datasets can be found [here](https://github.com/liuhao33/MSGNN/blob/main/data/readme.md).
+
+To train the model and test it on link prediction task, please run
 
 ```shell
-python run_DBLP.py
+python run_DBLP.py --repeat 1 --patience 5
 ```
 
-### Schema decomposition
-The implementation of the proposed decomposition algorithm can be found in `schema_decomposition.ipynb`
+`--repeat`: the number of repeats.
+`--patience`: the number of patience of early stopping.
 
-### Time consumption of instance search
-To exam the time consumption of instance search, open and run `time_DBLP.ipynb`
+### Ablation
+
+To run ablation study, please use `--ablation` parameter.
+
+`--ablation`: parameter of ablation study, choose one from {`graph`, `node`, `instance`, `global`}.
+
+For example, to test the model without instance module, please run
+
+```shell
+python run_DBLP.py --repeat 1 --patience 5 --ablation instance
+```
+
+### Masking strategy
+
+To test different masking strategies, please use `--masking-mode` parameter.
+
+`--masking-mode`: masking strategy to be used, choose one from {`default`, `random`, `zero`}.
+
+For example, to test the model with random masking strategy, please run
+
+```shell
+python run_DBLP.py --repeat 1 --patience 5 --masking-mode random
+```
+
+## Schema decomposition
+
+The implementation of the proposed decomposition algorithm can be found in
+
+```shell
+schema_decomposition.ipynb
+```
+
+Please open and run all cells.
+
+This script takes graph schema as input and outputs a decomposition plan.
+
+Sevaral example schemas are provided in the script.
+
+## Time consumption of instance search
+
+To exam the time consumption of instance search, please open and run all cells
+
+```shell
+time_DBLP.ipynb
+```
+
+Direct search and parallel enabled search are both provided in the script.
 
 ### Sensitivity analysis
-The raw data of sensitivity analysis can be found in `sensitivity.xlsx`
 
-### Generate representations 
-To get node representations, run
+To run parameters sensitivity study, please use `--num-heads`, `--learning-rate`, `--nlayers` and `--dropout` parameters.
+
+`--num-heads`: int, number of attention heads.
+
+`--learning-rate`: float, learning rate.
+
+`--nlayers`: int, number of MSGNN layers.
+
+`--dropout`: float, dropout rate.
+
+For example, to test the model with 6 heads, please run
 
 ```shell
-python representation_DBLP.py
+python run_DBLP.py --repeat 1 --patience 5 --num-heads 6
 ```
-The representations will be saved to `\data\DBLP_processed\representations`
+
+The results of sensitivity analysis can be found in `sensitivity.xlsx`
+
+### Generate representations for downstream tasks
+
+MSGNN is a embedding model. To get node representations, please run
+
+```shell
+python representation_DBLP.py --save
+```
+
+`--save`: add this parameter to save representations.
+
+The representations will be saved to `\data\DBLP_processed\representations` by default and can be utilized by other downstream tasks.
 We use [HINormer](https://github.com/Ffffffffire/HINormer) as the classifer on node classifacation task.

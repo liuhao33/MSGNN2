@@ -6,6 +6,49 @@ import pandas as pd
 import dask.dataframe as dd
 import time
 
+def plan_transform_v1(plan):
+    transformed_plan = {}
+    transformed_plan['stem'] = plan['main']
+    if len(plan['ms']) > 0:
+        transformed_plan['stem_slave'] = plan['ms']
+    if 'res' in plan.keys():
+        transformed_plan['branch'] = {}
+        for i, res in enumerate(plan['res']):
+            transformed_plan['branch'][i] = res['main']
+            if len(res['ms']) > 0:
+                transformed_plan['branch_slave'] = {}
+                transformed_plan['branch_slave'][i] = res['ms']
+    return transformed_plan
+
+
+def plan_transform_v2(plan):
+    assert len(plan.keys()) < 3, "Error: function currently is compatible with recursion depth < 3 only."
+        
+    transformed_plan = {}
+    transformed_plan['stem'] = plan[0][0]['main']  # depth 1
+    if 'ms' in plan[0][0].keys():
+        transformed_plan['stem_slave'] = plan[0][0]['ms']
+    if len(plan.keys()) == 2:
+        transformed_plan['branch'] = {}  # depth 2
+        transformed_plan['branch_slave'] = {}
+        for i in plan[1].keys():
+            transformed_plan['branch'][i] = plan[1][i]['main']
+            if 'ms' in plan[1][i].keys():
+                transformed_plan['branch_slave'][i] = plan[1][i]['ms']
+    
+        if len(transformed_plan['branch_slave']) == 0:
+            del transformed_plan['branch_slave'] 
+    
+    return transformed_plan
+
+
+# {0: {0: {'main': [5, 4, 1, 2, 3, 8]}},
+#  1: {0: {'main': [1, 0], 'to': 0},
+#   1: {'main': [2, 7, 9], 'to': 0},
+#   2: {'main': [4, 6], 'to': 0}},
+#  2: {0: {'main': [7, 10], 'to': 1}}}
+
+
 
 def get_intances(M, type_mask, schema, prefix_operator):
     """

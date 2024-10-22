@@ -3,57 +3,42 @@ this script is for producing representations of all nodes.
 
 '''
 import time
-# import argparse
+import argparse
 from utils.data import load_DBLP_data2
 from utils.tools_re import representations_generator
 import torch
-import torch.nn.functional as F
 from model.msgnn_re import MSGNN
 import numpy as np
 
-num_epochs = 200
-batch_size = 64
-patience = 10
 
-nlayers = 2
-global_readout = 'avg'
-pooling = 'max'
-graph_readout = 'max'
+weight_decay = 0.001
 
-hidden_dim = 1024
-out_dim = 256
-dropout_rate = 0.3
-alpha = 0.01 # leakyrelu slope
-beta_1 = 0.1 
-nheads_1 = 4 
-
-save_postfix = 'dblp'
-rpt = 0
+alpha = 0.01 # leaky slope
+beta = 0.1 # skip-connection
 
 data_path = r'./data/DBLP_processed'
-device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-features, subgraphs, subgraphs_train_val_test, labels, adj, type_mask = load_DBLP_data2(prefix = data_path)
+def run(nlayers, dropout_rate, hidden_dim, out_dim, num_heads, load_postfix, save_flag, max_size):
 
-subgraphs_train = subgraphs_train_val_test['subgraphs_train']
-subgraphs_val = subgraphs_train_val_test['subgraphs_val']
-subgraphs_test = subgraphs_train_val_test['subgraphs_test']
+    data_path = r'./data/DBLP_processed'
+    device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
 
-in_dims = [feature.shape[1] for feature in features]
-features = [torch.FloatTensor(feature).to(device) for feature in features]
-ntype = len(in_dims)
+    features, subgraphs, ____, __, ___, type_mask = load_DBLP_data2(prefix = data_path)
 
-t_all_start = time.time()
+    in_dims = [feature.shape[1] for feature in features]
+    features = [torch.FloatTensor(feature).to(device) for feature in features]
+    ntype = len(in_dims)
 
-net = MSGNN(ntype, in_dims, hidden_dim, out_dim, nheads_1, dropout_rate, alpha, beta_1, device, nlayers, global_readout, pooling, graph_readout)
-net.to(device)
+    net = MSGNN(ntype, in_dims, hidden_dim, out_dim, num_heads, dropout_rate, alpha, beta, device, nlayers)
+    net.to(device)
 
-net.load_state_dict(torch.load(r'./ckpt/checkpoint_{}_{}.pt'.format(save_postfix, rpt)))
+    net.load_state_dict(torch.load(r'./ckpt/checkpoint_{}.pt'.format(load_postfix)))
+    
+    node_representations = representations_generating_v2(net, subgraphs, features, type_mask, device, save_flag, max_size, load_postfix)
 
 
-def representations_generating_v2(net, subgraphs, features, type_mask, device, save_flag, max_size=10000, name = 'dblp'):
+def representations_generating_v2(net, subgraphs, features, type_mask, device, save_flag = True, max_size=10000, name = 'dblp'):
     # from utils.tools import representations_generator
-    print('——__——__——__——__——__——__——__——__——__——__')
     print('generating representations')
     t_g = time.time()
     repre_g = representations_generator(subgraphs, features, type_mask, device, max_size=max_size) # 2048
@@ -75,6 +60,17 @@ def representations_generating_v2(net, subgraphs, features, type_mask, device, s
     return node_representations.cpu().numpy()
 
 if __name__ == '__main__':
-    node_representations = representations_generating_v2(net, subgraphs, features, type_mask, device, save_flag = True, max_size=10000, name = 'dblp')
-    # node_representations = np.load(data_path + '/representations/' + 'dblp' + '_node_representations.npy')
+    parser = argparse.ArgumentParser(description='MSGNN demo for Available Check')
+    parser.add_argument('--nlayers', type=int, default=2, help='number of layers.')
+    parser.add_argument('--dropout', type=float, default=0.3, help='dropout rate')
+    parser.add_argument('--hidden-dim', type=int, default=1024, help='Dimension of the node hidden state. Default is 1024.')
+    parser.add_argument('--out-dim', type=int, default=256, help='Dimension of the output. Default is 256.')
+    parser.add_argument('--num-heads', type=int, default=4, help='Number of the attention heads. Default is 4.')
+    parser.add_argument('--load-postfix', default='dblp', help='Postfix for the saved model. Default is dblp.')
     
+    parser.add_argument('--save', action="store_true", help='Save embeddings.')
+    parser.add_argument('--batch-size', type=int, default=10000, help='Batch size.')
+    
+    args = parser.parse_args()
+    
+    run(args.nlayers, args.dropout, args.hidden_dim, args.out_dim, args.num_heads, args.load_postfix, args.save, args.batch_size)

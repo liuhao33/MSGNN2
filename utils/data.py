@@ -4,7 +4,7 @@ import scipy.sparse
 import pickle
 
 
-def load_Yelp2_data(prefix='data/preprocessed/Yelp2_processed'):
+def load_Yelp2_data(prefix='data/preprocessed/Yelp_processed'):
 
     features_0 = scipy.sparse.load_npz(prefix + '/features_0.npz').toarray()
     features_1 = scipy.sparse.load_npz(prefix + '/features_1.npz').toarray()
@@ -15,14 +15,12 @@ def load_Yelp2_data(prefix='data/preprocessed/Yelp2_processed'):
     adjM = scipy.sparse.load_npz(prefix + '/adjM.npz')
     type_mask = np.load(prefix + '/node_types.npy')
     labels = np.load(prefix + '/labels.npy')
-    train_val_test_idx = np.load(prefix + '/complete/train_val_test_nodes.npz')
     subgraphs = (np.load(prefix + '/complete/subgraphs.npy')).astype(int)
     subgraphs_train_val_test = np.load(prefix + '/complete/subgraphs_train_val_test.npz')
 
     return [features_0, features_1, features_2, features_3, features_4], \
             subgraphs, \
             subgraphs_train_val_test, \
-            train_val_test_idx, \
             labels, \
             adjM, \
             type_mask, \
@@ -38,19 +36,17 @@ def load_Freebase_data(prefix='data/preprocessed/Freebase_processed'):
     adjM = scipy.sparse.load_npz(prefix + '/adjM.npz')
     type_mask = np.load(prefix + '/node_types.npy')
     labels = np.load(prefix + '/labels.npy')
-    train_val_test_idx = np.load(prefix + '/complete/train_val_test_nodes.npz')
     subgraphs = (np.load(prefix + '/complete/subgraphs.npy')).astype(int)
     subgraphs_train_val_test = np.load(prefix + '/complete/subgraphs_train_val_test.npz')
 
     return [features_0, features_1, features_2, features_3], \
             subgraphs, \
             subgraphs_train_val_test, \
-            train_val_test_idx, \
             labels, \
             adjM, \
             type_mask, \
 
-def load_AminerS_data(prefix='data/preprocessed/Aminer2_processed'):
+def load_AminerS_data(prefix='data/preprocessed/Aminer_processed'):
     
     features_0 = scipy.sparse.load_npz(prefix + '/features_0.npz').toarray()
     features_1 = scipy.sparse.load_npz(prefix + '/features_1.npz').toarray()

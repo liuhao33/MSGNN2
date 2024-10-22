@@ -4,32 +4,20 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Fssn_layers(nn.Module):
-    def __init__(self, ntype, alpha, device, pooling = 'max', concat=True):
+    def __init__(self, ntype, alpha, device, concat=True):
         super(Fssn_layers, self).__init__()
         self.concat = concat
         self.ntype = ntype
         self.device = device
-        self.pooling = pooling 
         self.leakyrelu = nn.LeakyReLU(alpha)
     
     def aggregator(self, batch, att_feat): 
         nodes = torch.unique(batch)
         batch_nodes = batch.T.flatten()
-        
-        if self.pooling == 'avg':
-            node_aggregation = torch.zeros((len(nodes),att_feat.shape[0]), dtype = torch.float32) 
-            for node in nodes:
-                mean = 1/(batch_nodes == nodes).sum()
-                node_aggregation[node][(nodes == node)] = mean
-                
-            aggregated = torch.matmul(node_aggregation.to(self.device), att_feat.transpose(0,1)) 
-            
-        if self.pooling == 'max':
-            aggregated = torch.stack([torch.max(att_feat[batch_nodes == node], dim = 0)[0] for node in nodes])
-            aggregated = aggregated.transpose(0,1) # 4heads x unique_nodes x dims
+        aggregated = torch.stack([torch.max(att_feat[batch_nodes == node], dim = 0)[0] for node in nodes])
+        aggregated = aggregated.transpose(0,1) # 4heads x unique_nodes x dims
             
         return aggregated
-
 
     def forward(self, batch, batch_features, att_weights):
         filters = ~(torch.eye(self.ntype).bool())
@@ -49,9 +37,9 @@ class Fssn_layers(nn.Module):
         return batch_features
     
 
-class AttentionLayer_wg(nn.Module):  # with global
-    def __init__(self, ntype, hidden_dim, dropout_rate, alpha, beta, nheads, device, readout = 'avg'): 
-        super(AttentionLayer_wg, self).__init__()
+class AttentionLayer(nn.Module):  # with global
+    def __init__(self, ntype, hidden_dim, dropout_rate, alpha, beta, nheads, device, readout = True): 
+        super(AttentionLayer, self).__init__()
         self.ntype = ntype
         self.beta = beta  
         self.nheads = nheads  # multi-heads
@@ -59,8 +47,12 @@ class AttentionLayer_wg(nn.Module):  # with global
         self.readout = readout # global readout
         self.leakyrelu = nn.LeakyReLU(alpha)
         self.dropout = nn.Dropout(dropout_rate)
-        self.a = nn.ParameterList([nn.Parameter(torch.empty(size=(nheads, 3 * hidden_dim), device=device))
+        if self.readout:
+            self.a = nn.ParameterList([nn.Parameter(torch.empty(size=(nheads, 3 * hidden_dim), device=device))
                                    for i in range(ntype)]) # attention vector
+        else:
+            self.a = nn.ParameterList([nn.Parameter(torch.empty(size=(nheads, 2 * hidden_dim), device=device))
+                        for i in range(ntype)]) # attention vector
         for i in range(ntype):
             nn.init.xavier_uniform_(self.a[i], gain=1.414)
 
@@ -97,39 +89,29 @@ class AttentionLayer_wg(nn.Module):  # with global
             all_combinations_matrix.append(subgraph_repeated_in_chunks)
         all_combinations_matrix = torch.cat(all_combinations_matrix)
 
-        global_read_out = self.global_read_out(feat)  # calculating global embedding
-        global_read_out = global_read_out.repeat(all_combinations_matrix.shape[0] * all_combinations_matrix.shape[1]).reshape(all_combinations_matrix.shape[0],all_combinations_matrix.shape[1],global_read_out.shape[0])
-        all_combinations_matrix_with_global = torch.cat([all_combinations_matrix, global_read_out], dim=2) # concatenate global embedding
+        if self.readout:
+            global_read_out = torch.mean(feat, dim = 0)  # calculating global embedding
+            global_read_out = global_read_out.repeat(all_combinations_matrix.shape[0] * all_combinations_matrix.shape[1]).reshape(all_combinations_matrix.shape[0],all_combinations_matrix.shape[1],global_read_out.shape[0])
+            all_combinations_matrix_with_global = torch.cat([all_combinations_matrix, global_read_out], dim=2) # concatenate global embedding
 
-        return all_combinations_matrix_with_global
-    
-    def global_read_out(self, feat):
-        if self.readout == 'max':
-            read_out = torch.max(feat, dim = 0)[0]
-                
-        if self.readout == 'sum':
-            read_out = torch.sum(feat, dim = 0)
-        
-        if self.readout == 'avg':
-            read_out = torch.mean(feat, dim = 0)
-
-        return read_out
-
+            return all_combinations_matrix_with_global
+        else: 
+            return all_combinations_matrix
 
 class Dscrmnt_v2(nn.Module):
-    def __init__(self, ntype, out_dim, alpha, device, readout):
+    def __init__(self, ntype, out_dim, alpha, device, readout, ablation):
         super(Dscrmnt_v2, self).__init__()
         self.ntype = ntype
         self.device = device
         self.out_dim = out_dim
 
         self.leakyrelu = nn.LeakyReLU(alpha)
-        self.dropout = nn.Dropout(0.5)
         self.fc_graph = nn.Linear(out_dim,out_dim)
         self.fc_node = nn.ModuleList([nn.Linear(out_dim, out_dim) for _ in range(self.ntype)])
         self.OPD_out_node = nn.Linear(out_dim, 1)
         self.OPD_out_graph = nn.Linear(out_dim, 1)
         self.readout = readout # graph readout
+        self.ablation = ablation
     
     def graph_read_out(self, feats, perturbation):
         read_out = []
@@ -138,18 +120,6 @@ class Dscrmnt_v2(nn.Module):
                 graph_embedd = feats[graph]
                 read_out.append(torch.max(graph_embedd, dim = 0)[0])
             read_out = torch.stack(read_out)
-                
-        if self.readout == 'sum':
-            graph_aggregation = torch.zeros((len(perturbation),feats.shape[0]), dtype = torch.float32)
-            for graph_id in range(len(perturbation)):
-                graph_aggregation[graph_id][perturbation[graph_id]] = 1
-            read_out = torch.matmul(graph_aggregation.to(self.device), feats)
-        
-        if self.readout == 'avg':
-            graph_aggregation = torch.zeros((len(perturbation),feats.shape[0]), dtype = torch.float32)
-            for graph_id in range(len(perturbation)):
-                graph_aggregation[graph_id][perturbation[graph_id]] = 1/self.ntype
-            read_out = torch.matmul(graph_aggregation.to(self.device), feats)
 
         if self.readout == 'max_zero':
             for graph in perturbation:
@@ -159,19 +129,116 @@ class Dscrmnt_v2(nn.Module):
                     graph_embedd = torch.cat([graph_embedd,torch.zeros((1,graph_embedd.shape[1]),device = graph_embedd.device)])
                 read_out.append(torch.max(graph_embedd, dim = 0)[0])
             read_out = torch.stack(read_out)
-            
-            pass
-        
-        
+
         return read_out
     
     def forward(self, feats, perturbation):
         
         read_out = self.graph_read_out(feats, perturbation)
         read_out_graph = self.fc_graph(read_out)
+        
         read_out_node = torch.stack([p(read_out_graph) for p in self.fc_node])
         read_out_node = read_out_node.transpose(0,1).reshape(-1,self.out_dim)
-       
+        
         logits_node = self.OPD_out_node(read_out_node)
         logits_graph = self.OPD_out_graph(read_out_graph)
-        return logits_node,logits_graph 
+        
+        if self.ablation is None:
+            return logits_node,logits_graph
+        elif self.ablation == 'node':
+            return torch.zeros_like(logits_node, device=self.device, requires_grad=False),logits_graph
+        elif self.ablation == 'graph':
+            return logits_node,torch.zeros_like(logits_graph, device=self.device, requires_grad=False)
+            
+        
+
+class AttentionLayer_wosubgraph(nn.Module):
+    def __init__(self, ntype, hidden_dim, dropout_rate, alpha, beta, nheads, device, readout = True):   # embedding中的维度一致吗？
+        super(AttentionLayer_wosubgraph, self).__init__()
+        self.ntype = ntype
+        self.batch_size = None    # 即num of subgraphs
+        self.beta = beta  # 注意力残差连接参数
+        self.nheads = nheads       # 是否不需要nheads
+        self.device = device
+        self.readout = readout
+        self.leakyrelu = nn.LeakyReLU(alpha)
+        self.dropout = nn.Dropout(dropout_rate)
+        self.a = nn.ParameterList([nn.Parameter(torch.empty(size=(nheads, 3 * hidden_dim), device=device))
+                                   for i in range(ntype)]) # self.a的size = nheads * 3 hidden * 1
+        for i in range(ntype):
+            nn.init.xavier_uniform_(self.a[i], gain=1.414)
+
+    # subgraph的每一行都是一个本体子图，存储了该本体子图embedding的索引号，该索引号负责从feats中获取获取该本体子图的特征
+    # _prepare_attentional_mechanism_input 负责对本体子图的embeddings作拼接
+    def forward(self, feats, subgraphs, attentions):
+        self.batch_size = len(subgraphs)
+        a_feat_dict = {}
+        neighbors = []
+        global_read_out = torch.mean(feats, dim = 0)
+        for col in range(self.ntype):
+            col_filter = torch.ones(self.ntype, dtype=bool)
+            col_filter[col] = False
+            a_feat_dict[col] = []
+            for node in torch.unique(subgraphs[:,col]):
+                neighbor = torch.unique(subgraphs[:,col_filter][subgraphs[:,col] == node])
+                neighbors.append(neighbor)
+                node_repeat = feats[node].repeat_interleave(len(neighbor), dim=0).reshape(len(neighbor), -1)
+                all_combinations_matrix_with_global = torch.cat([node_repeat, feats[neighbor], global_read_out.repeat(len(neighbor)).reshape(len(neighbor), -1)], dim = 1)
+                a_feat_dict[col].append(all_combinations_matrix_with_global)
+        att_temp = []
+        for col in range(self.ntype):
+            for i in range(len(a_feat_dict[col])):
+                temp = torch.matmul(a_feat_dict[col][i], self.a[col].T).transpose(0,1)
+                temp = F.softmax(self.leakyrelu(temp), dim=1)
+                temp = self.dropout(temp)
+                att_temp.append(temp)
+
+        if attentions == []:
+            attentions_new = att_temp
+        else:
+            attentions_new = []
+            for i in range(len(attentions)):
+                attentions_new.append((1 - self.beta) * att_temp[i] + self.beta * attentions[i].detach())
+            
+        
+        # assert len(attentions_new) == len(torch.unique(subgraphs)), 'Error: att_weights nums do not align with node nums' 
+        
+        return attentions_new, neighbors
+    
+
+class Fssn_layers_wosubgraph(nn.Module):
+    def __init__(self, ntype, alpha, device, concat=True):
+        super(Fssn_layers_wosubgraph, self).__init__()
+        # self.dropout = dropout
+        # self.in_features = in_features
+        # self.out_features = out_features
+        # self.alpha = alpha
+        self.concat = concat
+        self.ntype = ntype
+        self.device = device
+        self.leakyrelu = nn.LeakyReLU(alpha)
+        # self.w_pool = nn.ModuleList([nn.Linear(in_features= self.in_dims[i], out_features=self.in_dims[i]) for i in self.ntype])
+
+
+    def forward(self, neighbors, batch_features, att_weights):
+        # filters = ~(torch.eye(self.ntype).bool())
+        # feat = torch.cat([F.embedding(batch[:,filter], batch_features) for filter in filters])
+        #     # edata_projected = F.embedding(batch[:,condition], batch_features) # group training data according to batch
+        #     # feat = torch.stack([p for p in edata_projected]) # batch x 3_neighbors x dim
+        #     # att = att_weights[i] # 4_heads x dim_att = 3_neighbors
+        # att_feat = torch.matmul(att_weights,feat) # batch x 4_heads x 334
+
+        att_feat = torch.stack([torch.matmul(att_weights[p],batch_features[neighbors[p]]) for p in range(len(att_weights))]) # batch x 4_heads x 334
+        att_feat = att_feat.transpose(0,1) # 4_heads x unique(batch) x dims
+             
+        # aggregated = self.aggregator(batch, att_feat)  # aggregated is 4_heads x 4_unique(batch) x dim
+        batch_features = batch_features.detach() + att_feat # skip-connection for x, (unique(batch) x dim) + (4_heads x unique(batch) x dims) = (4_heads x unique(batch) x dims)
+        batch_features = batch_features.transpose(0,1) # unique(batch) x 4_heads x dim
+            
+        if self.concat:
+            batch_features = self.leakyrelu(batch_features) # activation
+            batch_features = batch_features.reshape(batch_features.shape[0],-1) # 4_unique(batch) x (4_heads x 334)
+        else: 
+            batch_features = torch.mean(batch_features,dim=1)  # 4_unique(batch) x 334)
+
+        return batch_features

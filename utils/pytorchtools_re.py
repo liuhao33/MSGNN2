@@ -70,7 +70,7 @@ class FocalLoss(nn.Module):
 
 
 class Schema_perturbation(object):
-    def __init__(self, subgraphs_all, ratio, device, mode = 'normal'):
+    def __init__(self, subgraphs_all, ratio, device, mode = 'default'):
         super(Schema_perturbation, self).__init__()
         self.N_neg = None
         self.all_nodes = np.unique(subgraphs_all)
@@ -109,9 +109,9 @@ class Schema_perturbation(object):
             perturbation_candidates = perturbation_candidates[shuffle_idx]
             clean_candidates = clean_candidates[shuffle_idx]    
         else:
-            if self.mode == 'easy':
+            if self.mode == 'random':
                 nodes = [torch.unique(batch_graph) for _ in range(self.ntype)]
-            if self.mode == 'normal':
+            if self.mode == 'default':
                 nodes = [torch.unique(batch_graph[:,col]) for col in range(self.ntype)]      
             pert_idx = []    
             while cnt > 0 :
