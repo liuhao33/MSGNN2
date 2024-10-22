@@ -65,7 +65,7 @@ conda install ipykernel matplotlib
 
 ## Train and test model on DBLP
 
-The DBLP dataset is cleaned by [MAGNN](https://github.com/cynricfu/MAGNN), see `preprocess_v2_DBLP.ipynb` section 1. for details (an extra `nltk` package is used in this section only).
+The DBLP dataset is cleaned by [MAGNN](https://github.com/cynricfu/MAGNN), see `preprocess_v2_DBLP.ipynb` section 1 for details (an extra `nltk` package is used in this section only).
 
 Based on the cleaned dataset, we search schema instances (see `preprocess_v2_DBLP.ipynb` section 2) and feed them to our model.
 
